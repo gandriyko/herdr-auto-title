@@ -13,6 +13,7 @@ const LocateRetry = 10 * time.Second
 
 // Layout is where an agent files a session it found by id under one of its
 // homes: usually under the directory the session started in, else anywhere.
+// An agent that files a session by date rather than directory has no Filed.
 type Layout struct {
 	Filed    func(root, dir, sessionID string) string
 	Anywhere func(root, sessionID string) string
@@ -40,7 +41,7 @@ func (l Layout) Find(s *Search, roots []string, sessionID, dir string, now time.
 	s.searchedAt = now
 
 	for _, root := range roots {
-		if dir != "" {
+		if dir != "" && l.Filed != nil {
 			if candidate := l.Filed(root, dir, sessionID); regular(candidate) {
 				s.Path = candidate
 
@@ -48,9 +49,11 @@ func (l Layout) Find(s *Search, roots []string, sessionID, dir string, now time.
 			}
 		}
 
+		// Glob sorts what it finds, and a file named after its date sorts the
+		// newest last.
 		matches, err := filepath.Glob(l.Anywhere(root, sessionID))
 		if err == nil && len(matches) > 0 {
-			s.Path = matches[0]
+			s.Path = matches[len(matches)-1]
 
 			return true
 		}
