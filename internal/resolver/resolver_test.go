@@ -312,6 +312,93 @@ func TestAWorkspaceWithoutAName(t *testing.T) {
 	}
 }
 
+func directoryChain(maxLength int, hide bool) *Deterministic {
+	return Default(Options{
+		MaxLength:     DefaultMaxLength,
+		BranchMax:     DefaultBranchMaxLength,
+		DirectoryMax:  maxLength,
+		HideDirectory: hide,
+	})
+}
+
+func TestADirectoryIsCutToItsBound(t *testing.T) {
+	t.Parallel()
+
+	tab := tabWithPane(&state.PaneState{
+		Dir:           herdrtest.Dir("work", "SiteLine"),
+		TerminalTitle: "Fix OAuth redirect",
+	})
+
+	got := directoryChain(3, false).Resolve(tab)
+	if want := "Sit › Fix OAuth redirect"; got.Name != want {
+		t.Errorf("name = %q, want %q", got.Name, want)
+	}
+}
+
+func TestADirectoryIsMatchedBeforeItIsCut(t *testing.T) {
+	t.Parallel()
+
+	// Cut first, `Sit` would no longer match the workspace it repeats.
+	tab := tabWithPane(&state.PaneState{
+		Dir:           herdrtest.Dir("work", "SiteLine"),
+		TerminalTitle: "Fix OAuth redirect",
+	})
+	tab.WorkspaceName = "SiteLine"
+
+	got := directoryChain(3, false).Resolve(tab)
+	if want := "Fix OAuth redirect"; got.Name != want {
+		t.Errorf("name = %q, want %q", got.Name, want)
+	}
+}
+
+func TestAHiddenDirectoryLeavesTheRestOfTheTitle(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		pane *state.PaneState
+		want string
+	}{
+		{
+			name: "activity",
+			pane: &state.PaneState{Dir: api, TerminalTitle: "Fix OAuth redirect"},
+			want: "Fix OAuth redirect",
+		},
+		{
+			name: "branch",
+			pane: &state.PaneState{
+				Dir:           api,
+				Git:           git.Checkout{Branch: "release", Default: "main"},
+				TerminalTitle: "Fix OAuth redirect",
+			},
+			want: "release › Fix OAuth redirect",
+		},
+		// A tab reduced to nothing has lost more than the width it saved.
+		{name: "nothing else", pane: &state.PaneState{Dir: api}, want: "api"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := directoryChain(0, true).Resolve(tabWithPane(test.pane))
+			if got.Name != test.want {
+				t.Errorf("name = %q, want %q", got.Name, test.want)
+			}
+		})
+	}
+}
+
+func TestARemoteHostIsNoDirectory(t *testing.T) {
+	t.Parallel()
+
+	// The host is the one thing a row of remote shells is told apart by.
+	for _, chain := range []*Deterministic{directoryChain(1, false), directoryChain(0, true)} {
+		got := chain.Resolve(tabWithPane(moshPane("devbox")))
+		if !strings.Contains(got.Name, "devbox") {
+			t.Errorf("name = %q, want the host kept", got.Name)
+		}
+	}
+}
+
 func TestTheShippedChainIsAWellFormedLadder(t *testing.T) {
 	t.Parallel()
 

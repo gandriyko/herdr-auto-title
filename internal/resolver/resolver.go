@@ -126,6 +126,10 @@ type PaneResolver interface {
 type Options struct {
 	MaxLength int
 	BranchMax int
+	// DirectoryMax bounds the pane's directory in a title, in columns. Zero
+	// leaves it unbounded; HideDirectory leaves it out.
+	DirectoryMax  int
+	HideDirectory bool
 	// HideAgentName leaves the agent's name out of a title. It is stated this
 	// way round so that the zero value keeps the name, which is what a resolver
 	// built without options wants.
@@ -140,6 +144,8 @@ type Options struct {
 type Deterministic struct {
 	sources       []Source
 	maxLength     int
+	directoryMax  int
+	hideDirectory bool
 	hideAgentName bool
 	showHandle    bool
 }
@@ -164,6 +170,8 @@ func New(opts Options, sources ...Source) *Deterministic {
 	return &Deterministic{
 		sources:       ordered,
 		maxLength:     opts.MaxLength,
+		directoryMax:  opts.DirectoryMax,
+		hideDirectory: opts.HideDirectory,
 		hideAgentName: opts.HideAgentName,
 		showHandle:    opts.ShowHandle,
 	}
@@ -212,10 +220,22 @@ func (d *Deterministic) ResolvePanes(tab state.TabState) []Decision {
 // nameUnder assembles what the chain found into a title, dropping what the
 // workspace row above it says and then what any nearer row does.
 func (d *Deterministic) nameUnder(found collected, workspace string, rows ...Parts) Decision {
+	// A hidden directory is dropped as if a row above showed it, so a title
+	// with nothing else to say keeps it.
+	if d.hideDirectory && found.directory {
+		rows = append(rows, Parts{Context: found.parts.Context})
+	}
+
 	parts := withoutAbove(withoutRepetition(found.parts), Parts{Context: workspace})
 
 	for _, row := range rows {
 		parts = withoutAbove(parts, row)
+	}
+
+	// Cut only now: every comparison above matches the whole name, and `Sit`
+	// no longer matches the workspace `SiteLine` it repeats.
+	if found.directory {
+		parts.Context = truncate(parts.Context, d.directoryMax)
 	}
 
 	name := Format(parts, d.maxLength)
@@ -236,6 +256,9 @@ type collected struct {
 	parts      Parts
 	reason     string
 	confidence int
+	// directory reports that the context is the pane's directory. The context
+	// also carries a remote host, which DirectoryMax does not bound.
+	directory bool
 }
 
 // collect walks the sources in ladder order, filling each field with the first
@@ -298,6 +321,8 @@ func (c *collected) take(source Source, parts Parts) {
 
 	if c.parts.Context == "" && parts.Context != "" {
 		c.parts.Context = parts.Context
+
+		_, c.directory = source.(CWD)
 		if c.reason == "" {
 			c.credit(source)
 		}

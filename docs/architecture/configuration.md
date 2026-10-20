@@ -178,7 +178,7 @@ fits the topic to it, while any width set here is a guess.
 ## Why it is not reread
 
 The file is read once. Half the settings are consumed in `main.run` while it
-builds the resolver chains — `MAX_LENGTH` and `BRANCH_MAX` are baked into
+builds the resolver chains — `MAX_LENGTH`, `BRANCH_MAX` and `DIRECTORY_MAX` are baked into
 `resolver.Default`, `WORKSPACE_MAX_LENGTH` into the topic's bound, `POSITION`
 decides whether the tab chain is wrapped at all — so
 rereading the file mid-run would apply some settings and quietly ignore others.
